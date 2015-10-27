@@ -70,7 +70,7 @@ macro_rules! get_mut_param_func {
 
 #[derive(Clone)]
 pub struct Input {
-  pub data: Array,
+  pub data: Tensor,
   pub activation: String,
 }
 

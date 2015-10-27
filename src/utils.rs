@@ -24,19 +24,19 @@ macro_rules! hashmap {
     }}
 }
 
-// Convert a vector of elements to a vector of Array
-pub fn vec_to_array<T>(vec_values: Vec<T>, rows: usize, cols: usize) -> Array {
+// Convert a vector of elements to a vector of Tensor
+pub fn vec_to_array<T>(vec_values: Vec<T>, rows: usize, cols: usize) -> Tensor {
   raw_to_array(vec_values.as_ref(), rows, cols)
 }
 
-// Convert a generic vector to an Array
-pub fn raw_to_array<T>(raw_values: &[T], rows: usize, cols: usize) -> Array {
+// Convert a generic vector to an Tensor
+pub fn raw_to_array<T>(raw_values: &[T], rows: usize, cols: usize) -> Tensor {
   let dims = Dim4::new(&[rows as u64, cols as u64, 1, 1]);
-  Array::new(dims, &raw_values, Aftype::F32).unwrap()
+  Tensor::new(dims, &raw_values, Aftype::F32).unwrap()
 }
 
 // convert an array into a vector of rows
-pub fn array_to_rows(input: &Array) -> Vec<Array> {
+pub fn array_to_rows(input: &Tensor) -> Vec<Tensor> {
   let mut rows = Vec::new();
   for r in (0..input.dims().unwrap()[0]) {
     rows.push(af::row(input, r as u64).unwrap());
@@ -45,7 +45,7 @@ pub fn array_to_rows(input: &Array) -> Vec<Array> {
 }
 
 // convert a vector of rows into a single array
-pub fn rows_to_array(input: Vec<&Array>) -> Array {
+pub fn rows_to_array(input: Vec<&Tensor>) -> Tensor {
   // let mut arr = vec![input[0]];
   // // af_join_many supports up to 10 (9 + previous) arrays being joined at once
   // for rows in input[1..input.len()].iter().collect::<Vec<_>>().chunks(9) {
@@ -61,11 +61,11 @@ pub fn rows_to_array(input: Vec<&Array>) -> Array {
 }
 
 // Convert an array from one backend to the other
-pub fn array_swap_backend(input: &Array
+pub fn array_swap_backend(input: &Tensor
                           , from: af::AfBackend
                           , to: af::AfBackend
                           , from_device_id: i32
-                          , to_device_id: i32) -> Array
+                          , to_device_id: i32) -> Tensor
 {
   // swap to the old buffer
   af::set_backend(from).unwrap();
@@ -79,7 +79,7 @@ pub fn array_swap_backend(input: &Array
   af::set_backend(to).unwrap();
   af::set_device(to_device_id).unwrap();
 
-  let converted = Array::new(dims, &buffer, Aftype::F32).unwrap();
+  let converted = Tensor::new(dims, &buffer, Aftype::F32).unwrap();
   converted
 }
 
@@ -127,12 +127,12 @@ pub fn shuffle_matrix<T>(v: &mut[&mut [T]], cols: &[usize], row_major: bool) {
 
 // Randomly shuffle planes of an array
 // SLOOOOOOW
-pub fn shuffle_array(v: &mut[&mut Array], rows: u64) {
+pub fn shuffle_array(v: &mut[&mut Tensor], rows: u64) {
   let mut rng = rand::thread_rng();
   for row in (0..rows) {
     let rnd_row = rng.gen_range(0, rows - row);
     for mat in v.iter_mut() { //swap all tensors similarly
-      let dims = mat.dims().unwrap();
+      let dims = mat.get().dims().unwrap();
       let rnd_plane  = row_plane(mat, rnd_row).unwrap();
       let orig_plane = row_plane(mat, dims[0] - row - 1).unwrap();
       **mat = set_row_plane(mat, &rnd_plane, dims[0] - row - 1).unwrap();
@@ -141,56 +141,76 @@ pub fn shuffle_array(v: &mut[&mut Array], rows: u64) {
   }
 }
 
-pub fn row_plane(input: &Array, slice_num: u64) -> Result<Array, AfError> {
-  af::index(input, &[Seq::new(slice_num as f64, slice_num as f64, 1.0)
-                     , Seq::default()
-                     , Seq::default()])
+pub fn row_plane(input: &Tensor, slice_num: u64) -> Result<Tensor, AfError> {
+  Tensor{ array: af::index(input, &[Seq::new(slice_num as f64, slice_num as f64, 1.0)
+                                    , Seq::default()
+                                    , Seq::default()]).unwrap()
+          , device: input.device
+          , manager: input.manager.clone() }
 }
 
-pub fn set_row_plane(input: &Array, new_plane: &Array, plane_num: u64) -> Result<Array, AfError> {
+pub fn set_row_plane(input: &Tensor, new_plane: &Tensor, plane_num: u64) -> Result<Tensor, AfError> {
   match input.dims().unwrap().ndims() {
-    4 => af::assign_seq(input, &[Seq::new(plane_num as f64, plane_num as f64, 1.0)
-                                 , Seq::default()
-                                 , Seq::default()
-                                 , Seq::default()]
-                        , new_plane),
-    3 => af::assign_seq(input, &[Seq::new(plane_num as f64, plane_num as f64, 1.0)
-                                 , Seq::default()
-                                 , Seq::default()]
-                        , new_plane),
-    2 => af::assign_seq(input, &[Seq::new(plane_num as f64, plane_num as f64, 1.0)
-                                 , Seq::default()]
-                        , new_plane),
-    1 => af::assign_seq(input, &[Seq::new(plane_num as f64, plane_num as f64, 1.0)]
-                        , new_plane),
+    4 => Tensor{ array: af::assign_seq(input, &[Seq::new(plane_num as f64, plane_num as f64, 1.0)
+                                                , Seq::default()
+                                                , Seq::default()
+                                                , Seq::default()]
+                                       , new_plane).unwrap(),
+                 , device: input.device
+                 , manager: input.manager.clone() },
+    3 => Tensor { array: af::assign_seq(input, &[Seq::new(plane_num as f64, plane_num as f64, 1.0)
+                                                 , Seq::default()
+                                                 , Seq::default()]
+                                        , new_plane).unwrap()
+                  , device: input.device
+                  , manager: input.manager.clone() },
+    2 => Tensor { array: af::assign_seq(input, &[Seq::new(plane_num as f64, plane_num as f64, 1.0)
+                                                 , Seq::default()]
+                                        , new_plane).unwrap()
+                  , device: input.device
+                  , manager: input.manager.clone() },
+    1 => Tensor { array: af::assign_seq(input, &[Seq::new(plane_num as f64, plane_num as f64, 1.0)]
+                                        , new_plane).unwrap()
+                  , device: input.device
+                  , manager: input.manager.clone() },
     _ => panic!("unknown dimensions provided to set_row_planes"),
   }
 }
 
-pub fn row_planes(input: &Array, first: u64, last: u64) -> Result<Array, AfError> {
-  af::index(input, &[Seq::new(first as f64, last as f64, 1.0)
-                     , Seq::default()
-                     , Seq::default()])
+pub fn row_planes(input: &Tensor, first: u64, last: u64) -> Result<Tensor, AfError> {
+  Tensor { array : af::index(input, &[Seq::new(first as f64, last as f64, 1.0)
+                                      , Seq::default()
+                                      , Seq::default()]).unwrap()
+           , device: input.device
+           , manager: input.manager.clone() }
 }
 
-pub fn set_row_planes(input: &Array, new_planes: &Array
-                      , first: u64, last: u64) -> Result<Array, AfError>
+pub fn set_row_planes(input: &Tensor, new_planes: &Tensor
+                      , first: u64, last: u64) -> Result<Tensor, AfError>
 {
   match input.dims().unwrap().ndims() {
-    4 => af::assign_seq(input, &[Seq::new(first as f64, last as f64, 1.0)
-                                 , Seq::default()
-                                 , Seq::default()
-                                 , Seq::default()]
-                        , new_planes),
-    3 => af::assign_seq(input, &[Seq::new(first as f64, last as f64, 1.0)
-                                 , Seq::default()
-                                 , Seq::default()]
-                        , new_planes),
-    2 => af::assign_seq(input, &[Seq::new(first as f64, last as f64, 1.0)
-                                 , Seq::default()]
-                        , new_planes),
-    1 => af::assign_seq(input, &[Seq::new(first as f64, last as f64, 1.0)]
-                        , new_planes),
+    4 => Tensor{ array: af::assign_seq(input, &[Seq::new(first as f64, last as f64, 1.0)
+                                                , Seq::default()
+                                                , Seq::default()
+                                                , Seq::default()]
+                                       , new_planes).unwrap()
+                 , device: input.device
+                 , manager: input.manager.clone() },
+    3 => Tensor{ array: af::assign_seq(input, &[Seq::new(first as f64, last as f64, 1.0)
+                                                , Seq::default()
+                                                , Seq::default()]
+                                       , new_planes).unwrap()
+                 , device: input.device
+                 , manager: input.manager.clone() },
+    2 => Tensor {array: af::assign_seq(input, &[Seq::new(first as f64, last as f64, 1.0)
+                                                , Seq::default()]
+                                       , new_planes).unwrap()
+                 , device: input.device
+                 , manager: input.manager.clone() },
+    1 => Tensor { array: af::assign_seq(input, &[Seq::new(first as f64, last as f64, 1.0)]
+                                        , new_planes).unwrap(),
+                  , device: input.device
+                  , manager: input.manager.clone() },
     _ => panic!("unknown dimensions provided to set_row_planes"),
   }
 }
@@ -239,21 +259,24 @@ pub fn normalize<T: Float + Sub>(src: &[T], num_std_dev: T) -> Vec<T> {
 }
 
 // Normalize an array based on mean & num_std_dev deviations of the variance
-pub fn normalize_array(src: &Array, num_std_dev: f32) -> Array {
-  let mean = af::mean_all(src).unwrap().0 as f32;
-  let var = num_std_dev * af::var_all(src, false).unwrap().0 as f32;
+pub fn normalize_array(src: &Tensor, num_std_dev: f32) -> Tensor {
+  let mean = af::mean_all(src.get()).unwrap().0 as f32;
+  let var = num_std_dev * af::var_all(src.get(), false).unwrap().0 as f32;
   if var > 0.00000001 || var < 0.00000001 {
-    af::div(&af::sub(src, &mean, false).unwrap(), &var, false).unwrap()
+    (src - mean) / var
+    //af::div(&af::sub(src, &mean, false).unwrap(), &var, false).unwrap()
   }else{
-    af::sub(src, &mean, false).unwrap()
+    //af::sub(src, &mean, false).unwrap()
+    src - mean
   }
 }
 
-pub fn scale(src: &Array, low: f32, high: f32) -> Array {
-  let min = af::min_all(&src).unwrap().0 as f32;
-  let max = af::max_all(&src).unwrap().0 as f32;
+pub fn scale(src: &Tensor, low: f32, high: f32) -> Tensor {
+  let min = af::min_all(src.get()).unwrap().0 as f32;
+  let max = af::max_all(src.get()).unwrap().0 as f32;
 
-  af::add(&af::div(&af::mul(&(high - low), &af::sub(src, &min, false).unwrap(), false).unwrap()
-                   , &(max - min), false).unwrap()
-          , &low, false).unwrap()
+  (((high - low)*(src - min))/(max - min)) + low
+  // af::add(&af::div(&af::mul(&(high - low), &af::sub(src, &min, false).unwrap(), false).unwrap()
+  //                  , &(max - min), false).unwrap()
+  //         , &low, false).unwrap()
 }
