@@ -2,6 +2,7 @@ use af::{Array, Dim4, AfBackend, set_backend, set_device};
 use std::default::Default;
 //use itertools::Zip;
 
+use tensor::Tensor;
 use initializations;
 //use error::HAL Error;
 

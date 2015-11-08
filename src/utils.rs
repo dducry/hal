@@ -155,7 +155,7 @@ pub fn set_row_plane(input: &Tensor, new_plane: &Tensor, plane_num: u64) -> Resu
                                                 , Seq::default()
                                                 , Seq::default()
                                                 , Seq::default()]
-                                       , new_plane).unwrap(),
+                                       , new_plane).unwrap()
                  , device: input.device
                  , manager: input.manager.clone() },
     3 => Tensor { array: af::assign_seq(input, &[Seq::new(plane_num as f64, plane_num as f64, 1.0)
@@ -208,7 +208,7 @@ pub fn set_row_planes(input: &Tensor, new_planes: &Tensor
                  , device: input.device
                  , manager: input.manager.clone() },
     1 => Tensor { array: af::assign_seq(input, &[Seq::new(first as f64, last as f64, 1.0)]
-                                        , new_planes).unwrap(),
+                                        , new_planes).unwrap()
                   , device: input.device
                   , manager: input.manager.clone() },
     _ => panic!("unknown dimensions provided to set_row_planes"),
