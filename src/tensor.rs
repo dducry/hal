@@ -4,16 +4,37 @@ use std::fmt;
 use std::sync::{Arc, RwLock};
 use std::ops::{Add, Sub, Mul, Div, Deref, DerefMut};
 
-use device::{Device, DeviceManager};
+use device::{Device, DeviceManager, Manager};
 
 pub struct Tensor {
   array: Array,
   device: Device,
-  manager: Arc<RwLock<DeviceManager>>,
+  manager: Manager,
 }
 
+macro_rules! batch_op {
+  ($fn_name: ident, $af_func: ident) => (
+    //    #[allow(unused_mut)]
+    pub fn $fn_name(&self, other: &Tensor, batch: bool) -> Tensor {
+      if (other.device != self.device) {
+        panic!("{}: can't mix between two different devices", stringify!($fn_name));
+      }
+
+      let m = self.manager.read().unwrap();
+      m.swap_device(self.device);
+
+      Tensor { array: af::$af_func(&self.array, &other.array, batch).unwrap()
+               , manager: self.manager.clone()
+               , device: self.device }
+    }
+    )
+}
+
+//TODO: Implement from()
+//TODO: Implement batch macro as LHS/RHS and expose?
+
 impl Tensor {
-  fn new(array: Array, manager: &Arc<RwLock<DeviceManager>>
+  fn new(array: Array, manager: &Manager
          , backend: AfBackend, device: i32) -> Tensor {
     Tensor { manager: manager.clone()
              , array: array
@@ -38,62 +59,15 @@ impl Tensor {
     self.array.clone_from(update);
   }
 
-  fn batch_add(&self, other: &Tensor, batch: bool) -> Tensor {
-    if (other.device != self.device) {
-      panic!("add: can't mix between two different devices");
-    }
-
-    let m = self.manager.read().unwrap();
-    m.swap_device(self.device);
-
-    Tensor { array: af::add(&self.array, &other.array, batch).unwrap()
-             , manager: self.manager.clone()
-             , device: self.device }
-  }
-
-  fn batch_sub(&self, other: &Tensor, batch: bool) -> Tensor {
-    if other.device != self.device {
-      panic!("sub: can't mix between two different devices");
-    }
-
-    let m = self.manager.read().unwrap();
-    m.swap_device(self.device);
-
-    Tensor { array: af::sub(&self.array, &other.array, batch).unwrap()
-             , manager: self.manager.clone()
-             , device: self.device }
-  }
-
-  fn batch_mul(&self, other: &Tensor, batch: bool) -> Tensor {
-    if other.device != self.device {
-      panic!("mul: can't mix between two different devices");
-    }
-
-    let m = self.manager.read().unwrap();
-    m.swap_device(self.device);
-
-    Tensor { array: af::mul(&self.array, &other.array, batch).unwrap()
-             , manager: self.manager.clone()
-             , device: self.device }
-  }
-
-  fn batch_div(&self, other: &Tensor, batch: bool) -> Tensor {
-    if other.device != self.device {
-      panic!("div: can't mix between two different devices");
-    }
-
-    let m = self.manager.read().unwrap();
-    m.swap_device(self.device);
-
-    Tensor { array: af::div(&self.array, &other.array, batch).unwrap()
-             , manager: self.manager.clone()
-             , device: self.device }
-  }
+  batch_op!(batch_add, add);
+  batch_op!(batch_sub, sub);
+  batch_op!(batch_div, div);
+  batch_op!(batch_mul, mul);
 
   fn matmul(&self, other: &Tensor, lhs_prop: MatProp, rhs_prop: MatProp) -> Tensor
   {
     if other.device != self.device {
-      panic!("div: can't mix between two different devices");
+      panic!("matmul: can't mix between two different devices");
     }
 
     let m = self.manager.read().unwrap();
@@ -167,7 +141,7 @@ impl Div<Tensor> for Tensor {
 }
 
 // TODO: Enable f64/u64, etc support separately
-macro_rules! algebra_impl (
+macro_rules! algebra_impl {
   ($operand: ident, $fn_name: ident, $foo: ty) => (
     impl $operand<$foo> for Tensor {
       type Output = Tensor;
@@ -187,7 +161,8 @@ macro_rules! algebra_impl (
                  , manager: rhs.manager.clone() }
       }
     }
-    ));
+    )
+}
 
 algebra_impl!(Mul, mul, i8);
 algebra_impl!(Mul, mul, i16);

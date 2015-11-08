@@ -11,6 +11,7 @@ use af::{Dim4, Array, Aftype, AfBackend, Seq, AfError};
 use itertools::Zip;
 use rustc_serialize::Encodable;
 
+use tensor::Tensor;
 //use error::HALError;
 
 // allows for let a = hashmap!['key1' => value1, ...];

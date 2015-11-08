@@ -26,8 +26,8 @@ pub fn normal(dims: Dim4, scale: f32
               , device: Device
               , manager: &Arc<RwLock<DeviceManager>>) -> Tensor {
   Tensor {array: af::mul(&af::randn(dims, af::Aftype::F32).unwrap(), &scale, false).unwrap()
-          , device: x.device
-          , manager: x.manager.clone() }
+          , device: device
+          , manager: manager.clone() }
 }
 
 pub fn uniform(dims: Dim4, scale: f32
@@ -35,24 +35,24 @@ pub fn uniform(dims: Dim4, scale: f32
                , manager: &Arc<RwLock<DeviceManager>>) -> Tensor{
   Tensor {array: af::sub(&af::mul(&af::randu(dims, af::Aftype::F32).unwrap(), &scale, false).unwrap()
                          , &(scale / 2.0f32), false).unwrap()
-          , device: x.device
-          , manager: x.manager.clone() }
+          , device: device
+          , manager: manager.clone() }
 }
 
 pub fn zeros(dims: Dim4
              , device: Device
              , manager: &Arc<RwLock<DeviceManager>>) -> Tensor {
   Tensor{ array: af::constant(0.0 as f32, dims).unwrap()
-          , device: x.device
-          , manager: x.manager.clone() }
+          , device: device
+          , manager: manager.clone() }
 }
 
 pub fn ones(dims: Dim4
             , device: Device
             , manager: &Arc<RwLock<DeviceManager>>) -> Tensor {
   Tensor{ array: af::constant(1.0 as f32, dims).unwrap()
-          , device: x.device
-          , manager: x.manager.clone() }
+          , device: device
+          , manager: manager.clone() }
 }
 
 pub fn glorot_uniform(dims: Dim4

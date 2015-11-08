@@ -1,6 +1,9 @@
 use af;
 use af::{AfBackend};
 use std::cell::Cell;
+use std::sync::{Arc, RwLock};
+
+pub type Manager = Arc<RwLock<DeviceManager>>;
 
 #[derive(Clone, Copy, PartialEq)]
 pub struct Device {
@@ -38,7 +41,7 @@ fn create_devices(backend: AfBackend) -> Vec<Device> {
 
 
 impl DeviceManager {
-  fn new() -> DeviceManager {
+  fn new() -> Manager {
     let mut devices = Vec::new();
     let available = af::get_available_backends().unwrap();
     for backend in available {
@@ -49,10 +52,10 @@ impl DeviceManager {
     let current = devices.last().unwrap().clone();
     set_device(current.backend, current.id);
 
-    DeviceManager {
+    Arc::new(RwLock::new(DeviceManager {
       devices: devices,
       current: Cell::new(current),
-    }
+    }))
   }
 
   pub fn swap_device(&self, device: Device)

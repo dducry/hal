@@ -1,7 +1,8 @@
-use af::{Array, Dim4, AfBackend, set_backend, set_device};
+use af::{Array, Dim4};
 use std::default::Default;
 //use itertools::Zip;
 
+use device::{DeviceManager, Manager, Device};
 use tensor::Tensor;
 use initializations;
 //use error::HAL Error;
@@ -78,15 +79,15 @@ pub struct Input {
 #[derive(Clone)]
 pub struct Params {
   pub layer_type: String,
-  pub backend: AfBackend,
-  pub weights: Vec<Array>,
-  pub biases: Vec<Array>,
+  pub device: Device,
+  pub weights: Vec<Tensor>,
+  pub biases: Vec<Tensor>,
   pub activations: Vec<String>,
-  pub deltas: Vec<Array>,
+  pub deltas: Vec<Tensor>,
   pub inputs: Vec<Input>,
   pub outputs: Vec<Input>,
-  pub recurrences: Vec<Array>,
-  pub optional: Vec<Array>,
+  pub recurrences: Vec<Tensor>,
+  pub optional: Vec<Tensor>,
 }
 
 pub struct ParamManager {
@@ -104,8 +105,7 @@ impl Default for ParamManager {
 impl ParamManager {
   pub fn add(&mut self
              , layer_type: &str
-             , backend: AfBackend
-             , device: i32
+             , device: Device
              , weight_params: Vec<(&str, (usize, usize))> //(init, (i, o))
              , biases_params: Vec<(&str, (usize, usize))> //(init, (i, o))
              //, delta_params:  Vec<(&str, (usize, usize))>    //(init, (i, o))
@@ -113,30 +113,26 @@ impl ParamManager {
              , recurrence_dims: Option<Vec<(&str, (usize, usize))>>
              , optional_dims: Option<Vec<(&str, (usize, usize))>>)
   {
-    // set backend before creating params
-    set_backend(backend);
-    set_device(device);
-
     // generate the weights
-    let mut weights: Vec<Array> = Vec::with_capacity(weight_params.len());
+    let mut weights: Vec<Tensor> = Vec::with_capacity(weight_params.len());
     for (w_init, w_dims) in weight_params {
       weights.push(self.generate(w_init, w_dims));
     }
     // generate the biases
-    let mut biases: Vec<Array> = Vec::with_capacity(biases_params.len());
+    let mut biases: Vec<Tensor> = Vec::with_capacity(biases_params.len());
     for (b_init, b_dims) in biases_params {
       biases.push(self.generate(b_init, b_dims));
     }
 
     // // generate the deltas
-    // let mut deltas: Vec<Array> = Vec::with_capacity(delta_params.len());
+    // let mut deltas: Vec<Tensor> = Vec::with_capacity(delta_params.len());
     // for (d_init, d_dims) in delta_params {
     //   deltas.push(self.generate(d_init, d_dims));
     // }
 
 
     // generate recurrence vectors
-    let mut recurrences: Vec<Array> = Vec::new();
+    let mut recurrences: Vec<Tensor> = Vec::new();
     if let Some(r) = recurrence_dims{
       for (r_init, r_dims) in r {
         recurrences.push(self.generate(r_init, r_dims));
@@ -144,7 +140,7 @@ impl ParamManager {
     }
 
     // some elements have optional params
-    let mut optional: Vec<Array> = Vec::new();
+    let mut optional: Vec<Tensor> = Vec::new();
     if let Some(o) = optional_dims {
       for (o_init, o_dims) in o {
         optional.push(self.generate(o_init, o_dims));
@@ -154,7 +150,7 @@ impl ParamManager {
     let owned_activations = activations.iter().map(|x| x.to_string()).collect::<Vec<String>>();
     self.layer_storage.push(Params{
       layer_type: layer_type.to_string(),
-      backend: backend,
+      device: device,
       weights: weights,
       biases: biases,
       activations: owned_activations,
@@ -166,7 +162,7 @@ impl ParamManager {
     });
   }
 
-  fn generate(&self, init: &str, dims: (usize, usize)) -> Array {
+  fn generate(&self, init: &str, dims: (usize, usize)) -> Tensor {
     let dims = Dim4::new(&[dims.0 as u64, dims.1 as u64, 1, 1]);
     initializations::get_initialization(init, dims).unwrap()
   }
@@ -185,59 +181,59 @@ impl ParamManager {
     &mut self.layer_storage[layer_index]
   }
 
-  get_param_func!(get_weight, weights, Array);
-  get_param_func!(get_bias, biases, Array);
+  get_param_func!(get_weight, weights, Tensor);
+  get_param_func!(get_bias, biases, Tensor);
   get_param_func!(get_activation, activations, String);
-  get_param_func!(get_delta, deltas, Array);
+  get_param_func!(get_delta, deltas, Tensor);
   get_param_func!(get_input, inputs, Input);
   get_param_func!(get_output, outputs, Input);
-  get_param_func!(get_recurrence, recurrences, Array);
-  get_param_func!(get_optional, optional, Array);
+  get_param_func!(get_recurrence, recurrences, Tensor);
+  get_param_func!(get_optional, optional, Tensor);
 
-  get_mut_param_func!(get_mut_weight, weights, Array);
-  get_mut_param_func!(get_mut_bias, biases, Array);
+  get_mut_param_func!(get_mut_weight, weights, Tensor);
+  get_mut_param_func!(get_mut_bias, biases, Tensor);
   get_mut_param_func!(get_mut_activation, activations, String);
-  get_mut_param_func!(get_mut_delta, deltas, Array);
+  get_mut_param_func!(get_mut_delta, deltas, Tensor);
   get_mut_param_func!(get_mut_input, inputs, Input);
   get_mut_param_func!(get_mut_output, outputs, Input);
-  get_mut_param_func!(get_mut_recurrence, recurrences, Array);
-  get_mut_param_func!(get_mut_optional, optional, Array);
+  get_mut_param_func!(get_mut_recurrence, recurrences, Tensor);
+  get_mut_param_func!(get_mut_optional, optional, Tensor);
 
-  get_param_vec_func!(get_weights, weights, Array);
-  get_param_vec_func!(get_biases, biases, Array);
+  get_param_vec_func!(get_weights, weights, Tensor);
+  get_param_vec_func!(get_biases, biases, Tensor);
   get_param_vec_func!(get_activations, activations, String);
-  get_param_vec_func!(get_deltas, deltas, Array);
+  get_param_vec_func!(get_deltas, deltas, Tensor);
   get_param_vec_func!(get_inputs, inputs, Input);
   get_param_vec_func!(get_outputs, outputs, Input);
-  get_param_vec_func!(get_recurrences, recurrences, Array);
-  get_param_vec_func!(get_optionals, optional, Array);
+  get_param_vec_func!(get_recurrences, recurrences, Tensor);
+  get_param_vec_func!(get_optionals, optional, Tensor);
 
-  get_param_vec_func!(get_mut_weights, weights, Array);
-  get_param_vec_func!(get_mut_biases, biases, Array);
+  get_param_vec_func!(get_mut_weights, weights, Tensor);
+  get_param_vec_func!(get_mut_biases, biases, Tensor);
   get_param_vec_func!(get_mut_activations, activations, String);
-  get_param_vec_func!(get_mut_deltas, deltas, Array);
+  get_param_vec_func!(get_mut_deltas, deltas, Tensor);
   get_param_vec_func!(get_mut_inputs, inputs, Input);
   get_param_vec_func!(get_mut_outputs, outputs, Input);
-  get_param_vec_func!(get_mut_recurrences, recurrences, Array);
-  get_param_vec_func!(get_mut_optionals, optional, Array);
+  get_param_vec_func!(get_mut_recurrences, recurrences, Tensor);
+  get_param_vec_func!(get_mut_optionals, optional, Tensor);
 
-  set_param_func!(set_weight, weights, Array);
-  set_param_func!(set_bias, biases, Array);
+  set_param_func!(set_weight, weights, Tensor);
+  set_param_func!(set_bias, biases, Tensor);
   set_param_func!(set_activation, activations, String);
-  set_param_func!(set_delta, deltas, Array);
+  set_param_func!(set_delta, deltas, Tensor);
   set_param_func!(set_input, inputs, Input);
   set_param_func!(set_output, outputs, Input);
-  set_param_func!(set_recurrence, recurrences, Array);
-  set_param_func!(set_optional, optional, Array);
+  set_param_func!(set_recurrence, recurrences, Tensor);
+  set_param_func!(set_optional, optional, Tensor);
 
-  set_param_vec_func!(set_weights, weights, Array);
-  set_param_vec_func!(set_biases, biases, Array);
+  set_param_vec_func!(set_weights, weights, Tensor);
+  set_param_vec_func!(set_biases, biases, Tensor);
   set_param_vec_func!(set_activations, activations, String);
-  set_param_vec_func!(set_deltas, deltas, Array);
+  set_param_vec_func!(set_deltas, deltas, Tensor);
   set_param_vec_func!(set_inputs, inputs, Input);
   set_param_vec_func!(set_outputs, outputs, Input);
-  set_param_vec_func!(set_recurrences, recurrences, Array);
-  set_param_vec_func!(set_optionals, optional, Array);
+  set_param_vec_func!(set_recurrences, recurrences, Tensor);
+  set_param_vec_func!(set_optionals, optional, Tensor);
 
   pub fn get_bias_dims(&self, layer_index: usize) -> Vec<Dim4> {
     let mut dims = Vec::new();
@@ -308,8 +304,7 @@ impl ParamManager {
 /** Custom Layer Traits **/
 pub trait DenseGenerator {
   fn add_dense(&mut self
-               , backend: AfBackend
-               , device: i32
+               , device: Device
                , input_size: usize
                , output_size: usize
                , activation: &str
@@ -329,8 +324,7 @@ pub enum LSTMIndex {
 
 pub trait LSTMGenerator {
   fn add_lstm(&mut self
-              , backend: AfBackend
-              , device: i32
+              , device: Device
               , input_size: usize
               , output_size: usize
               , max_seq_size: usize
@@ -345,15 +339,14 @@ pub trait LSTMGenerator {
 /** Custom Layer Impls **/
 impl DenseGenerator for ParamManager {
   fn add_dense(&mut self
-               , backend: AfBackend
-               , device: i32
+               , device: Device
                , input_size: usize
                , output_size: usize
                , activation: &str
                , w_init: &str
                , b_init: &str)
   {
-    self.add("dense", backend, device
+    self.add("dense", device
              , vec![(w_init, (output_size, input_size))]
              , vec![(b_init, (output_size, 1))]
              , vec![activation]
@@ -363,8 +356,7 @@ impl DenseGenerator for ParamManager {
 
 impl LSTMGenerator for ParamManager {
   fn add_lstm(&mut self
-              , backend: AfBackend
-              , device: i32
+              , device: Device
               , input_size: usize
               , output_size: usize
               , max_seq_size: usize
@@ -379,7 +371,7 @@ impl LSTMGenerator for ParamManager {
     let recurrent_dims = (output_size, output_size);
     let bias_dims = (output_size, 1);
     // W_i, W_f, W_o, W_ct, U_i, U_f, U_o, U_ct
-    self.add("lstm", backend, device
+    self.add("lstm", device
              , vec![(w_init, input_dims)
                     , (w_init, input_dims)
                     , (w_init, input_dims)
